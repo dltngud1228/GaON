@@ -1,177 +1,393 @@
-/*
-  GaON Bot - Arduino UNO Code
+#include <Wire.h>
+#include <LiquidCrystal_I2C.h>
 
-  역할:
-  - 모터 제어
-  - LCD 상태 표시
-  - 초음파 센서 거리 측정
-  - ESP32-CAM 또는 외부 모듈과의 시리얼 통신
+LiquidCrystal_I2C lcd(0x27, 16, 2);
 
-  사용 방법:
-  1. 이 파일의 예시 핀맵을 실제 가온봇 핀맵에 맞게 수정합니다.
-  2. 기존에 사용했던 최종 Arduino UNO 코드를 이 파일에 붙여넣어도 됩니다.
-  3. Wi-Fi 비밀번호, 개인정보 등은 절대 이 파일에 넣지 마세요.
 
-  TODO:
-  - 실제 최종 핀맵 확인 후 수정
-  - 최종 주행 함수 붙여넣기
-  - 초음파 센서 핀 확인
-*/
+const int FL_IA = 2;
+const int FL_IB = 3;
 
-#include <SoftwareSerial.h>
+const int FR_IA = 4;
+const int FR_IB = 5;
 
-// ESP32-CAM GPIO13 -> Arduino UNO A0
-// Arduino UNO A1 -> 필요 시 ESP32-CAM RX 또는 예비 통신 핀
-SoftwareSerial espSerial(A0, A1);
+const int RL_IA = 6;
+const int RL_IB = 7;
 
-// =======================
-// Motor Pin Example
-// =======================
-// 아래 핀은 예시입니다. 실제 가온봇 최종 배선에 맞게 수정하세요.
+const int RR_IA = 8;
+const int RR_IB = 9;
 
-const int FL_IA = 2;  // Front Left Motor IA
-const int FL_IB = 3;  // Front Left Motor IB
+// =====================
+// 초음파 센서 핀
+// =====================
+const int LEFT_TRIG = 10;
+const int LEFT_ECHO = 11;
 
-const int FR_IA = 4;  // Front Right Motor IA
-const int FR_IB = 5;  // Front Right Motor IB
+const int RIGHT_TRIG = 12;
+const int RIGHT_ECHO = 13;
 
-const int RL_IA = 6;  // Rear Left Motor IA
-const int RL_IB = 7;  // Rear Left Motor IB
-
-// 초음파 센서 핀은 실제 배선 확인 후 수정
-const int TRIG_PIN = 8;
-const int ECHO_PIN = 9;
-
-// =======================
-// Basic Motor Functions
-// =======================
-
-void stopMotors() {
-  digitalWrite(FL_IA, LOW);
-  digitalWrite(FL_IB, LOW);
-  digitalWrite(FR_IA, LOW);
-  digitalWrite(FR_IB, LOW);
-  digitalWrite(RL_IA, LOW);
-  digitalWrite(RL_IB, LOW);
-}
-
-void moveForward() {
-  // TODO: 실제 바퀴 방향에 맞게 HIGH/LOW 수정
-  digitalWrite(FL_IA, HIGH);
-  digitalWrite(FL_IB, LOW);
-  digitalWrite(FR_IA, HIGH);
-  digitalWrite(FR_IB, LOW);
-  digitalWrite(RL_IA, HIGH);
-  digitalWrite(RL_IB, LOW);
-}
-
-void moveBackward() {
-  // TODO: 실제 바퀴 방향에 맞게 HIGH/LOW 수정
-  digitalWrite(FL_IA, LOW);
-  digitalWrite(FL_IB, HIGH);
-  digitalWrite(FR_IA, LOW);
-  digitalWrite(FR_IB, HIGH);
-  digitalWrite(RL_IA, LOW);
-  digitalWrite(RL_IB, HIGH);
-}
-
-void turnLeft() {
-  // TODO: 실제 좌회전 방향에 맞게 수정
-  digitalWrite(FL_IA, LOW);
-  digitalWrite(FL_IB, HIGH);
-  digitalWrite(FR_IA, HIGH);
-  digitalWrite(FR_IB, LOW);
-  digitalWrite(RL_IA, LOW);
-  digitalWrite(RL_IB, HIGH);
-}
-
-void turnRight() {
-  // TODO: 실제 우회전 방향에 맞게 수정
-  digitalWrite(FL_IA, HIGH);
-  digitalWrite(FL_IB, LOW);
-  digitalWrite(FR_IA, LOW);
-  digitalWrite(FR_IB, HIGH);
-  digitalWrite(RL_IA, HIGH);
-  digitalWrite(RL_IB, LOW);
-}
-
-// =======================
-// Ultrasonic Sensor
-// =======================
-
-long readDistanceCM() {
-  digitalWrite(TRIG_PIN, LOW);
-  delayMicroseconds(2);
-
-  digitalWrite(TRIG_PIN, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(TRIG_PIN, LOW);
-
-  long duration = pulseIn(ECHO_PIN, HIGH, 30000);
-  long distance = duration * 0.034 / 2;
-
-  return distance;
-}
-
-// =======================
-// Setup & Loop
-// =======================
+// =====================
+// 제스처 설정
+// =====================
+const int HAND_DISTANCE = 7;
+const unsigned long GESTURE_TIME = 8000;
+const unsigned long YES_HOLD_TIME = 1500;
+const int NO_ALTERNATE_COUNT = 3;
 
 void setup() {
-  Serial.begin(9600);
-  espSerial.begin(9600);
+  // UNO 기본 시리얼 D0/D1 사용
+  // ESP32-CAM과 통신 속도 4800
+  Serial.begin(4800);
 
   pinMode(FL_IA, OUTPUT);
   pinMode(FL_IB, OUTPUT);
+
   pinMode(FR_IA, OUTPUT);
   pinMode(FR_IB, OUTPUT);
+
   pinMode(RL_IA, OUTPUT);
   pinMode(RL_IB, OUTPUT);
 
-  pinMode(TRIG_PIN, OUTPUT);
-  pinMode(ECHO_PIN, INPUT);
+  pinMode(RR_IA, OUTPUT);
+  pinMode(RR_IB, OUTPUT);
 
-  stopMotors();
+  pinMode(LEFT_TRIG, OUTPUT);
+  pinMode(LEFT_ECHO, INPUT);
 
-  Serial.println("GaON Bot UNO Ready");
+  pinMode(RIGHT_TRIG, OUTPUT);
+  pinMode(RIGHT_ECHO, INPUT);
+
+  stopMotor();
+
+  lcd.init();
+  lcd.backlight();
+
+  showHappyFace();
 }
 
 void loop() {
-  if (espSerial.available()) {
-    char command = espSerial.read();
+  if (Serial.available()) {
+    char cmd = Serial.read();
 
-    switch (command) {
-      case 'F':
-        moveForward();
-        break;
+    if (cmd != '\n' && cmd != '\r') {
+      runCommand(cmd);
+    }
+  }
+}
 
-      case 'B':
-        moveBackward();
-        break;
+void runCommand(char cmd) {
+  if (cmd == 'F' || cmd == 'f') {
+    forward();
+  }
+  else if (cmd == 'B' || cmd == 'b') {
+    backward();
+  }
+  else if (cmd == 'L' || cmd == 'l') {
+    left();
+  }
+  else if (cmd == 'R' || cmd == 'r') {
+    right();
+  }
+  else if (cmd == 'S' || cmd == 's') {
+    stopMotor();
+  }
+  else if (cmd == '1') {
+    stopMotor();
+    showMessageAndGesture("Did you eat?");
+  }
+  else if (cmd == '2') {
+    stopMotor();
+    showMessageAndGesture("Take medicine?");
+  }
+  else if (cmd == '3') {
+    stopMotor();
+    showMessageAndGesture("Are you okay?");
+  }
+  else if (cmd == 'T' || cmd == 't') {
+    sendYesToESP();
+    showYesFace();
+    delay(1500);
+    showHappyFace();
+  }
+}
 
-      case 'L':
-        turnLeft();
-        break;
+// =====================
+// LCD 얼굴
+// =====================
+void showHappyFace() {
+  lcd.clear();
 
-      case 'R':
-        turnRight();
-        break;
+  lcd.setCursor(3, 0);
+  lcd.print("^");
 
-      case 'S':
-        stopMotors();
-        break;
+  lcd.setCursor(12, 0);
+  lcd.print("^");
 
-      default:
-        stopMotors();
-        break;
+  lcd.setCursor(5, 1);
+  lcd.print("\\____/");
+}
+
+void showYesFace() {
+  lcd.clear();
+
+  lcd.setCursor(3, 0);
+  lcd.print("^");
+
+  lcd.setCursor(12, 0);
+  lcd.print("^");
+
+  lcd.setCursor(5, 1);
+  lcd.print("\\____/");
+}
+
+void showNoFace() {
+  lcd.clear();
+
+  lcd.setCursor(3, 0);
+  lcd.print("T");
+
+  lcd.setCursor(12, 0);
+  lcd.print("T");
+
+  lcd.setCursor(5, 1);
+  lcd.print("/----\\");
+}
+
+void showNoResponseFace() {
+  lcd.clear();
+
+  lcd.setCursor(3, 0);
+  lcd.print("-");
+
+  lcd.setCursor(12, 0);
+  lcd.print("-");
+
+  lcd.setCursor(5, 1);
+  lcd.print("------");
+}
+
+// =====================
+// ESP32-CAM으로 결과 전송
+// =====================
+void sendYesToESP() {
+  Serial.write('Y');
+}
+
+void sendNoToESP() {
+  Serial.write('N');
+}
+
+void sendNoResponseToESP() {
+  Serial.write('X');
+}
+
+// =====================
+// 메시지 + 제스처
+// =====================
+void showMessageAndGesture(String msg) {
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print(msg);
+  lcd.setCursor(0, 1);
+  lcd.print("Gesture Ready");
+
+  delay(1000);
+
+  waitGesture();
+
+  delay(1500);
+
+  showHappyFace();
+}
+
+long getDistance(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);
+
+  if (duration == 0) {
+    return -1;
+  }
+
+  long distance = duration * 0.034 / 2;
+  return distance;
+}
+
+void waitGesture() {
+  unsigned long startTime = millis();
+
+  unsigned long rightHoldStart = 0;
+  bool rightHolding = false;
+
+  int lastSide = 0;
+  int alternateCount = 0;
+
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("Gesture Ready");
+  lcd.setCursor(0, 1);
+  lcd.print("R=YES LR=NO");
+
+  while (millis() - startTime < GESTURE_TIME) {
+    long leftDistance = getDistance(LEFT_TRIG, LEFT_ECHO);
+    delay(40);
+
+    long rightDistance = getDistance(RIGHT_TRIG, RIGHT_ECHO);
+    delay(40);
+
+    bool leftClose = (leftDistance > 0 && leftDistance <= HAND_DISTANCE);
+    bool rightClose = (rightDistance > 0 && rightDistance <= HAND_DISTANCE);
+
+    // YES: 오른쪽 센서 1.5초 유지
+    if (rightClose && !leftClose) {
+      if (rightHolding == false) {
+        rightHolding = true;
+        rightHoldStart = millis();
+      }
+
+      if (millis() - rightHoldStart >= YES_HOLD_TIME) {
+        sendYesToESP();
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("Answer: YES");
+
+        delay(800);
+        showYesFace();
+
+        return;
+      }
+    }
+    else {
+      rightHolding = false;
+      rightHoldStart = 0;
+    }
+
+    // NO: 좌우 번갈아 감지
+    int currentSide = 0;
+
+    if (leftClose && !rightClose) {
+      currentSide = 1;
+    }
+    else if (rightClose && !leftClose) {
+      currentSide = 2;
+    }
+
+    if (currentSide != 0) {
+      if (lastSide == 0) {
+        lastSide = currentSide;
+      }
+      else if (currentSide != lastSide) {
+        alternateCount++;
+        lastSide = currentSide;
+
+        lcd.clear();
+        lcd.setCursor(0, 0);
+        lcd.print("NO Gesture");
+        lcd.setCursor(0, 1);
+        lcd.print("Count: ");
+        lcd.print(alternateCount);
+      }
+    }
+
+    if (alternateCount >= NO_ALTERNATE_COUNT) {
+      sendNoToESP();
+
+      lcd.clear();
+      lcd.setCursor(0, 0);
+      lcd.print("Answer: NO");
+
+      delay(800);
+      showNoFace();
+
+      return;
     }
   }
 
-  // 거리 확인 예시
-  long distance = readDistanceCM();
-  Serial.print("Distance: ");
-  Serial.print(distance);
-  Serial.println(" cm");
+  // 시간 초과
+  sendNoResponseToESP();
 
-  delay(100);
+  lcd.clear();
+  lcd.setCursor(0, 0);
+  lcd.print("No Response");
+
+  delay(800);
+  showNoResponseFace();
+}
+
+// =====================
+// 모터 제어
+// =====================
+void forward() {
+  digitalWrite(FL_IA, HIGH);
+  digitalWrite(FL_IB, LOW);
+
+  digitalWrite(FR_IA, HIGH);
+  digitalWrite(FR_IB, LOW);
+
+  digitalWrite(RL_IA, HIGH);
+  digitalWrite(RL_IB, LOW);
+
+  digitalWrite(RR_IA, HIGH);
+  digitalWrite(RR_IB, LOW);
+}
+
+void backward() {
+  digitalWrite(FL_IA, LOW);
+  digitalWrite(FL_IB, HIGH);
+
+  digitalWrite(FR_IA, LOW);
+  digitalWrite(FR_IB, HIGH);
+
+  digitalWrite(RL_IA, LOW);
+  digitalWrite(RL_IB, HIGH);
+
+  digitalWrite(RR_IA, LOW);
+  digitalWrite(RR_IB, HIGH);
+}
+
+void left() {
+  digitalWrite(FL_IA, LOW);
+  digitalWrite(FL_IB, HIGH);
+
+  digitalWrite(RL_IA, LOW);
+  digitalWrite(RL_IB, HIGH);
+
+  digitalWrite(FR_IA, HIGH);
+  digitalWrite(FR_IB, LOW);
+
+  digitalWrite(RR_IA, HIGH);
+  digitalWrite(RR_IB, LOW);
+}
+
+void right() {
+  digitalWrite(FL_IA, HIGH);
+  digitalWrite(FL_IB, LOW);
+
+  digitalWrite(RL_IA, HIGH);
+  digitalWrite(RL_IB, LOW);
+
+  digitalWrite(FR_IA, LOW);
+  digitalWrite(FR_IB, HIGH);
+
+  digitalWrite(RR_IA, LOW);
+  digitalWrite(RR_IB, HIGH);
+}
+
+void stopMotor() {
+  digitalWrite(FL_IA, LOW);
+  digitalWrite(FL_IB, LOW);
+
+  digitalWrite(FR_IA, LOW);
+  digitalWrite(FR_IB, LOW);
+
+  digitalWrite(RL_IA, LOW);
+  digitalWrite(RL_IB, LOW);
+
+  digitalWrite(RR_IA, LOW);
+  digitalWrite(RR_IB, LOW);
 }
