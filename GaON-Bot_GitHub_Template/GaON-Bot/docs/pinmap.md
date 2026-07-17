@@ -1,7 +1,6 @@
 # GaON Bot Pin Map
 
-> 이 문서는 가온봇의 핀맵을 정리하기 위한 파일입니다.  
-> 실제 최종 배선과 다르면 반드시 수정하세요.
+
 
 ## Arduino UNO
 
@@ -11,14 +10,14 @@
 | ESP32-CAM 통신 TX | A1 | 필요 시 사용 |
 | LCD SDA | A4 | I2C |
 | LCD SCL | A5 | I2C |
-| Front Left Motor IA | D2 | 확인 필요 |
-| Front Left Motor IB | D3 | 확인 필요 |
-| Front Right Motor IA | D4 | 확인 필요 |
-| Front Right Motor IB | D5 | 확인 필요 |
-| Rear Left Motor IA | D6 | 확인 필요 |
-| Rear Left Motor IB | D7 | 확인 필요 |
-| Ultrasonic TRIG | D8 | 확인 필요 |
-| Ultrasonic ECHO | D9 | 확인 필요 |
+| Front Left Motor IA | D2 | 
+| Front Left Motor IB | D3 | 
+| Front Right Motor IA | D4 | 
+| Front Right Motor IB | D5 | 
+| Rear Left Motor IA | D6 |
+| Rear Left Motor IB | D7 
+| Ultrasonic TRIG | D8 | 
+| Ultrasonic ECHO | D9 | 
 
 ## ESP32-CAM
 
