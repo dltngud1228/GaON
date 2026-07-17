@@ -23,17 +23,5 @@
 - 모터 구동부는 별도 전원을 사용하는 것이 안정적입니다.
 - 모터와 ESP32-CAM을 같은 전원에 연결하면 전압 강하로 영상이 끊길 수 있습니다.
 
-## 회로도 이미지 넣는 위치
 
-회로도 이미지가 있다면 아래 경로에 넣고 README에 연결하세요.
-
-```text
-images/circuit_diagram.png
-```
-
-README에 넣는 예시:
-
-```md
-![Circuit Diagram](images/circuit_diagram.png)
-```
 
