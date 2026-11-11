@@ -364,6 +364,4 @@ void loop() {
   delay(10);
 }
 
-  위 예제의 app_httpd.cpp, camera_index.h 등이 함께 필요할 수 있습니다.
-  이 저장소에는 기본 구조만 넣어두었습니다.
 */
